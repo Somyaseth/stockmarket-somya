@@ -1,76 +1,79 @@
-/* xlsx.js (C) 2013-present  SheetJS -- http://sheetjs.com */
-/* Notes:
-   - usage: `ReactDOM.render( <SheetJSApp />, document.getElementById('app') );`
-   - xlsx.full.min.js is loaded in the head of the HTML page
-   - this script should be referenced with type="text/babel"
-   - babel.js in-browser transpiler should be loaded before this script
-*/
 import React from "react";
 import XLSX from "xlsx";
-import DataService from "./DataService";
-import AdminDashboard from "./AdminDashboard";
-import Button from "@material-ui/core/Button";
-import { withRouter } from "react-router";
 
-class SheetJSApp extends React.Component {
+export default class SheetJSApp extends React.Component {
   constructor(props) {
     super(props);
     this.state = {
       data: [] /* Array of Arrays e.g. [["a","b"],[1,2]] */,
-      cols: [] /* Array of column objects e.g. { name: "C", K: 2 } */,
+      cols: [] /* Array of column objects e.g. { name: "C", K: 2 } */
     };
     this.handleFile = this.handleFile.bind(this);
-    // this.exportFile = this.exportFile.bind(this);
+    this.exportFile = this.exportFile.bind(this);
   }
-  handleFile(file) {
+  handleFile(file /*:File*/) {
     /* Boilerplate to set up FileReader */
     const reader = new FileReader();
     const rABS = !!reader.readAsBinaryString;
-    reader.onload = (e) => {
+    reader.onload = e => {
       /* Parse data */
       const bstr = e.target.result;
-      const wb = XLSX.read(bstr, {
-        type: rABS ? "binary" : "array",
-        cellDates: true,
-      });
+      const wb = XLSX.read(bstr, { type: rABS ? "binary" : "array" });
       /* Get first worksheet */
       const wsname = wb.SheetNames[0];
       const ws = wb.Sheets[wsname];
       console.log(rABS, wb);
       /* Convert array of arrays */
-      const data = XLSX.utils.sheet_to_json(ws, {
-        header: 1,
-        raw: false,
-        dateNF: "yyyy-mm-dd",
-      });
-      console.log(
-        JSON.stringify(data) +
-          "this data needs to be passed to rest endpoint to save prices"
-      );
+      const data = XLSX.utils.sheet_to_json(ws, { header: 1 ,raw:false,dateNF:'dd-mm-yyyy'});
+      console.log(JSON.stringify(data)+"this data needs to be passed to rest endpoint to save prices");
       /* Update state */
       this.setState({ data: data, cols: make_cols(ws["!ref"]) });
-      console.log(this.state.data);
     };
     if (rABS) reader.readAsBinaryString(file);
     else reader.readAsArrayBuffer(file);
   }
+  exportFile() {
+    /* convert state to workbook */
+    const ws = XLSX.utils.aoa_to_sheet(this.state.data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "SheetJS");
+    /* generate XLSX file and send to client */
+    XLSX.writeFile(wb, "sheetjs.xlsx");
+  }
   render() {
     return (
+     
+    
       <DragDropFile handleFile={this.handleFile}>
         <div className="row">
           <div className="col-xs-12">
-            <DataInput
-              handleFile={this.handleFile}
-              uploadData={this.state.data}
-            />
+            <DataInput handleFile={this.handleFile} />
           </div>
         </div>
+        <div className="row">
+          <div className="col-xs-4">
+            <button 
+              disabled={!this.state.data.length}
+              onClick={this.exportFile}
+            >
+              Export
+            </button>
+     
+            
+          </div>
+         
+        </div>
+        <div className="row">
+          <div className="col-xs-12">
+            <OutTable data={this.state.data} cols={this.state.cols} />
+          </div>
+        </div>
+       
       </DragDropFile>
+      
     );
   }
 }
-
-export default withRouter(SheetJSApp);
 
 /* -------------------------------------------------------------------------- */
 
@@ -115,73 +118,59 @@ class DragDropFile extends React.Component {
 class DataInput extends React.Component {
   constructor(props) {
     super(props);
-    this.state = {
-      isUploadedSuccessfully: false,
-    };
     this.handleChange = this.handleChange.bind(this);
-    this.uploadFile = this.uploadFile.bind(this);
   }
   handleChange(e) {
     const files = e.target.files;
     if (files && files[0]) this.props.handleFile(files[0]);
   }
-  uploadFile() {
-    DataService.uploadExcel(this.props.uploadData)
-      .then((response) => {
-        if (response.status === 200)
-          this.setState({ isUploadedSuccessfully: true });
-        alert("File uploaded succesfully");
-      })
-      .catch((error) => {
-        console.log(error);
-        this.setState({ errorMsg: "Error uploading excel" });
-        console.log(this.state.errorMsg);
-      });
-  }
-  loadSuccessfullMsg() {
-    if (this.state.isUploadedSuccessfully === true) {
-      return (
-        <div className="uploadExcelSuccessful">
-          <label>File Uploaded Successfully!</label>
-        </div>
-      );
-    }
-  }
   render() {
     return (
       <form className="form-inline">
         <div className="form-group">
-          <div>
-            <AdminDashboard />
-          </div>
-          <div className="addExcel">
-            <div className="form">
-              <label className="uploadExcelStock" htmlFor="file">
-                Upload Stock Price
-              </label>
-              <input
-                type="file"
-                className="uploadControl"
-                id="file"
-                accept={SheetJSFT}
-                onChange={this.handleChange}
-              />
-              <div>
-                <Button
-                  className="uploadExcelButton"
-                  variant="outlined"
-                  size="large"
-                  color="primary"
-                  onClick={() => this.uploadFile()}
-                >
-                  Upload
-                </Button>
-                {this.loadSuccessfullMsg}
-              </div>
-            </div>
-          </div>
+          <label htmlFor="file" className= "rat "> Spreadsheet</label>
+          <input
+            type="file"
+            className="form-control"
+            id="file"
+            accept={SheetJSFT}
+            onChange={this.handleChange}
+          />
         </div>
       </form>
+    );
+  }
+}
+
+/*
+  Simple HTML Table
+  usage: <OutTable data={data} cols={cols} />
+    data:Array<Array<any> >;
+    cols:Array<{name:string, key:number|string}>;
+*/
+class OutTable extends React.Component {
+  render() {
+    return (
+      <div className="table-responsive">
+        <table align ="center" className="table table-striped">
+          <thead>
+            <tr>
+              {this.props.cols.map(c => (
+                <th key={c.key}>{c.name}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {this.props.data.map((r, i) => (
+              <tr key={i}>
+                {this.props.cols.map(c => (
+                  <td className="designx " key={c.key}>{r[c.key]}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     );
   }
 }
@@ -207,15 +196,15 @@ const SheetJSFT = [
   "wb*",
   "wq*",
   "html",
-  "htm",
+  "htm"
 ]
-  .map(function (x) {
+  .map(function(x) {
     return "." + x;
   })
   .join(",");
 
 /* generate an array of column objects */
-const make_cols = (refstr) => {
+const make_cols = refstr => {
   let o = [],
     C = XLSX.utils.decode_range(refstr).e.c + 1;
   for (var i = 0; i < C; ++i) o[i] = { name: XLSX.utils.encode_col(i), key: i };
